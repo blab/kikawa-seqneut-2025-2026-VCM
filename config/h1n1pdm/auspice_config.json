@@ -1,0 +1,225 @@
+{
+  "title": "Real-time tracking of influenza A/H1N1pdm evolution",
+  "maintainers": [
+    {
+      "name": "John Huddleston",
+      "url": "https://bedford.io/team/john-huddleston/"
+    }
+  ],
+  "data_provenance": [
+    {
+      "name": "GenBank",
+      "url": "https://www.ncbi.nlm.nih.gov/genbank/"
+    }
+  ],
+  "build_url": "https://github.com/nextstrain/seasonal-flu",
+  "colorings": [
+    {
+      "key": "gt",
+      "title": "Genotype",
+      "type": "categorical"
+    },
+    {
+      "key": "num_date",
+      "title": "Date",
+      "type": "continuous"
+    },
+        {
+      "key": "subclade",
+      "title": "Subclade",
+      "type": "categorical",
+      "scale": [
+        [
+          "C.1.9",
+          "#4272CE"
+        ],
+        [
+          "C.1.9.1",
+          "#58A2AC"
+        ],
+        [
+          "C.1.9.3",
+          "#7DB877"
+        ],
+        [
+          "D.1",
+          "#AEBD50"
+        ],
+        [
+          "D.3.1",
+          "#D8AE3E"
+        ],
+        [
+          "D.3.1.1",
+          "#E67A32"
+        ],
+        [
+          "D.5",
+          "#DB2823"
+        ]
+      ]
+    },
+    {
+      "key": "median_titer",
+      "title": "Median raw titer",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "median_titer_for_HKU",
+      "title": "Median raw titer for HKU",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "median_titer_for_SCH",
+      "title": "Median raw titer for SCH",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "median_titer_for_CTS",
+      "title": "Median raw titer for CTS",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "median_titer_for_NIID",
+      "title": "Median raw titer for NIID",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "median_titer_for_PENN",
+      "title": "Median raw titer for PENN",
+      "type": "continuous",
+      "scale": [
+        [80, "#fde725"],
+        [160, "#90d743"],
+        [320, "#21918c"],
+        [1280, "#443983"],
+        [2560, "#440154"]
+      ],
+      "legend": [
+        {"value": 80, "display": "<160", "bounds": [0, 160]},
+        {"value": 161, "display": "160-320", "bounds": [160, 320]},
+        {"value": 321, "display": "320-640", "bounds": [320, 640]},
+        {"value": 1280, "display": ">=640", "bounds": [640, 5120]}
+      ]
+    },
+    {
+      "key": "cTiterSub",
+      "title": "Antigenic advance (substitutions)",
+      "type": "continuous"
+    },
+    {
+      "key": "country",
+      "title": "Country",
+      "type": "categorical"
+    },
+    {
+      "key": "kikawa",
+      "title": "Experimental strain",
+      "type": "categorical",
+      "scale": [
+        ["present_0", "#CCCCCC"],
+        ["present_1", "#E6B400"]
+      ]
+    }
+  ],
+  "geo_resolutions": [
+    "country"
+  ],
+  "display_defaults": {
+    "map_triplicate": true,
+    "color_by": "median_titer",
+    "branch_label": "Subclade",
+    "tip_label": "strain"
+  },
+  "filters": [
+    "subclade",
+    "country",
+    "authors"
+  ],
+  "panels": [
+    "tree",
+    "measurements",
+    "map",
+    "entropy",
+    "frequencies"
+  ],
+  "metadata_columns": [
+    "insdcAccessionFull_seg4"
+  ],
+  "extensions": {
+    "nextclade": {
+      "clade_node_attrs": [
+        {
+          "name": "subclade",
+          "displayName": "Subclade",
+          "description": "Experimental fine-grained subclade annotation."
+        }
+      ]
+    }
+  }
+}

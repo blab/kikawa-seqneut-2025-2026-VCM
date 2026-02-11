@@ -1,0 +1,10 @@
+.DS_Store
+.idea
+*.log
+tmp/
+.snakemake/
+auspice/
+data/
+builds/
+tables/
+nextclade_dataset/

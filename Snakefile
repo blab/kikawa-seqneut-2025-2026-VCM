@@ -1,0 +1,672 @@
+MIN_DATE = "2025-06-01"
+MAX_DATE = "2026-01-01"
+MAX_SEQUENCES = 500
+SUBSAMPLE_SEED = 314159
+LINEAGES = [
+    "h1n1pdm",
+    "h3n2",
+]
+LINEAGE_TO_BLOOM_LINEAGE = {
+    "h1n1pdm": "H1N1",
+    "h3n2": "H3N2",
+}
+GENES = [
+    "SigPep",
+    "HA1",
+    "HA2",
+]
+
+NEXTCLADE_DATASET_BY_LINEAGE = {
+    "h1n1pdm": "nextstrain/flu/h1n1pdm/ha",
+    "h3n2": "flu_h3n2_ha_broad",
+}
+SUBCLADE_URL_BY_LINEAGE_AND_SEGMENT = {
+    "h1n1pdm": {
+        "ha": "https://raw.githubusercontent.com/influenza-clade-nomenclature/seasonal_A-H1N1pdm_HA/main/.auto-generated/subclades.tsv",
+    },
+    "h3n2": {
+        "ha": "https://raw.githubusercontent.com/influenza-clade-nomenclature/seasonal_A-H3N2_HA/main/.auto-generated/subclades.tsv",
+    },
+}
+
+SEQUENCES_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/final_titer_data/human_viruses.csv"
+TITER_METADATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/sera_metadata/all_sera_metadata.csv"
+TITER_DATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/aggregated_titers/titers_human.csv"
+
+wildcard_constraints:
+    lineage = r'h1n1pdm|h3n2',
+
+rule all:
+    input:
+        tree_annotations=expand("tables/{lineage}_annotations.tsv", lineage=LINEAGES),
+        trees=expand("auspice/kikawa-seqneut-2025-2026-VCM_{lineage}.json", lineage=LINEAGES),
+        frequencies=expand("auspice/kikawa-seqneut-2025-2026-VCM_{lineage}_tip-frequencies.json", lineage=LINEAGES),
+        measurements=expand("auspice/kikawa-seqneut-2025-2026-VCM_{lineage}_measurements.json", lineage=LINEAGES),
+
+#
+# Prepare sequences and metadata.
+#
+
+rule download_kikawa_2025_2026_NH_VCM_strain_sequences_table:
+    output:
+        data="data/strains-kikawa-2025-2026-NH-VCM.csv",
+    params:
+        sequences_url=SEQUENCES_URL,
+    shell:
+        r"""
+        curl -L {params.sequences_url:q} > {output.data:q}
+        """
+
+rule extract_kikawa_2025_2026_ha_nucleotide_sequences:
+    input:
+        data="data/strains-kikawa-2025-2026-NH-VCM.csv",
+    output:
+        sequences="data/strains-kikawa-2025-2026-NH-VCM.fasta",
+    shell:
+        r"""
+        csvtk cut -f virus,nt_sequence_HA_ectodomain {input.data} \
+            | csvtk csv2tab \
+            | seqkit tab2fx -p virus > {output.sequences}
+        """
+
+rule extract_kikawa_2025_2026_metadata_by_lineage:
+    input:
+        data="data/strains-kikawa-2025-2026-NH-VCM.csv",
+    output:
+        metadata="data/{lineage}/metadata_kikawa.tsv",
+    params:
+        lineage=lambda wildcards: LINEAGE_TO_BLOOM_LINEAGE.get(wildcards.lineage),
+    shell:
+        r"""
+        csvtk filter2 -f '$subtype=="{params.lineage}"' {input.data} \
+            | csvtk cut -f virus,subclade,derived_haplotype,virus_collection_date \
+            | csvtk rename -f virus,virus_collection_date -n strain,date \
+            | csvtk csv2tab > {output.metadata}
+        """
+
+rule get_kikawa_2025_2026_sequences_by_lineage:
+    input:
+        data="data/strains-kikawa-2025-2026-NH-VCM.fasta",
+    output:
+        data="data/{lineage}/ha/sequences_kikawa.fasta",
+    params:
+        lineage=lambda wildcards: LINEAGE_TO_BLOOM_LINEAGE.get(wildcards.lineage),
+    shell:
+        r"""
+        seqkit grep -r -p '_{params.lineage}$' {input.data} > {output.data}
+        """
+
+rule download_open_sequences:
+    output:
+        sequences="data/{lineage}/ha/sequences_open.fasta",
+    params:
+        sequences_url="https://api.loculus.genspectrum.org/{lineage}/sample/unalignedNucleotideSequences/seg4?downloadAsFile=true&downloadFileBasename={lineage}_nuc-seg4&dataFormat=fasta&versionStatus=LATEST_VERSION&isRevocation=false&sampleCollectionDateRangeLowerFrom=2024-01-01&sampleCollectionDateRangeUpperTo=2026-01-01&fastaHeaderTemplate=%7BdisplayName%7D&hostNameScientific=Homo+sapiens",
+    shell:
+        r"""
+        curl -L -o {output.sequences:q} {params.sequences_url:q}
+        """
+
+rule download_open_metadata:
+    output:
+        metadata="data/{lineage}/metadata_open.tsv",
+    params:
+        metadata_url="https://api.loculus.genspectrum.org/{lineage}/sample/details?downloadAsFile=true&downloadFileBasename={lineage}_metadata&dataFormat=tsv&fields=accessionVersion%2CsampleCollectionDate%2Ccountry%2Cauthors%2CcladeHA%2CdisplayName%2CinsdcAccessionFull_seg4%2CsampleCollectionDateRangeLower%2CsampleCollectionDateRangeUpper%2CspecimenCollectorSampleId&versionStatus=LATEST_VERSION&isRevocation=false&sampleCollectionDateRangeLowerFrom=2024-01-01&sampleCollectionDateRangeUpperTo=2026-01-01&hostNameScientific=Homo+sapiens",
+    shell:
+        r"""
+        curl -L {params.metadata_url:q} \
+            | csvtk -t rename -f displayName,sampleCollectionDate,cladeHA -n strain,date,legacy-clade > {output.metadata:q}
+        """
+
+rule select_contextual_sequences_and_metadata:
+    input:
+        sequences="data/{lineage}/ha/sequences_open.fasta",
+        metadata="data/{lineage}/metadata_open.tsv",
+    output:
+        sequences="data/{lineage}/ha/sequences_open_contextual.fasta",
+        metadata="data/{lineage}/metadata_open_contextual.tsv",
+    params:
+        subsample_max_sequences=MAX_SEQUENCES,
+        subsample_seed=SUBSAMPLE_SEED,
+    shell:
+        r"""
+        augur filter \
+            --sequences {input.sequences} \
+            --metadata {input.metadata} \
+            --exclude-ambiguous-dates-by any \
+            --group-by year month \
+            --subsample-max-sequences {params.subsample_max_sequences} \
+            --subsample-seed {params.subsample_seed} \
+            --output-sequences {output.sequences} \
+            --output-metadata {output.metadata}
+        """
+
+rule merge_metadata_and_sequences:
+    input:
+        kikawa_metadata="data/{lineage}/metadata_kikawa.tsv",
+        kikawa_sequences="data/{lineage}/ha/sequences_kikawa.fasta",
+        contextual_metadata="data/{lineage}/metadata_open_contextual.tsv",
+        contextual_sequences="data/{lineage}/ha/sequences_open_contextual.fasta",
+    output:
+        sequences="builds/{lineage}/sequences.fasta",
+        metadata="builds/{lineage}/metadata_merged.tsv",
+    shell:
+        r"""
+        augur merge \
+            --sequences {input.kikawa_sequences} {input.contextual_sequences} \
+            --metadata kikawa={input.kikawa_metadata} contextual={input.contextual_metadata} \
+            --source-columns "{{NAME}}" \
+            --output-sequences {output.sequences} \
+            --output-metadata {output.metadata}
+        """
+
+rule fixup_metadata_source_values:
+    input:
+        metadata="builds/{lineage}/metadata_merged.tsv",
+    output:
+        metadata="builds/{lineage}/metadata.tsv",
+    shell:
+        r"""
+        csvtk replace -t -f kikawa,contextual -p '(0|1)' -r 'present_$1' {input.metadata} > {output.metadata}
+        """
+
+#
+# Prepare titers.
+#
+
+rule download_titers_metadata:
+    output:
+        data="data/titers_metadata.csv",
+    params:
+        titer_metadata_url=TITER_METADATA_URL,
+    shell:
+        r"""
+        curl -L -o {output.data:q} {params.titer_metadata_url:q}
+        """
+
+rule prepare_titers_metadata:
+    input:
+        data="data/titers_metadata.csv",
+    output:
+        data="data/titers_metadata_standardized.tsv",
+    shell:
+        r"""
+        csvtk rename -f serum -n serum_id {input.data} \
+            | csvtk cut -T -f serum_id,cohort,collection_date,age,sex > {output.data}
+        """
+
+rule download_titers:
+    output:
+        data="data/titers.csv",
+    params:
+        titer_data_url=TITER_DATA_URL,
+    shell:
+        r"""
+        curl -L {params.titer_data_url:q} > {output.data:q}
+        """
+
+rule prepare_initial_standard_titers:
+    input:
+        data="data/titers.csv",
+    output:
+        data="data/initial_standard_titers.csv",
+    shell:
+        r"""
+        csvtk rename -f virus,serum -n virus_strain,serum_id {input.data} \
+            | csvtk cut -f virus_strain,serum_id,titer \
+            | csvtk grep -f serum_id -v -r -p '_d28$' > {output.data}
+        """
+
+rule get_titers_by_lineage:
+    input:
+        data="data/initial_standard_titers.csv",
+    output:
+        data="data/{lineage}/initial_standard_titers.csv",
+    params:
+        lineage=lambda wildcards: LINEAGE_TO_BLOOM_LINEAGE.get(wildcards.lineage),
+    shell:
+        r"""
+        csvtk grep -f virus_strain -r -p '_{params.lineage}$' {input.data} > {output.data}
+        """
+
+rule get_reference_strain_per_serum_id_by_max_titer:
+    input:
+        data="data/{lineage}/initial_standard_titers.csv",
+    output:
+        data="data/{lineage}/reference_strains.csv",
+    shell:
+        r"""
+        csvtk sort -k titer:nr {input.data} \
+            | csvtk uniq -f serum_id -n 1 \
+            | csvtk cut -f virus_strain,serum_id \
+            | csvtk rename -f virus_strain -n serum_strain > {output.data}
+        """
+
+# titers must be structured like: test, ref_virus, serum, src_id, titer
+rule merge_titers_and_reference_strains_by_serum_id:
+    input:
+        data="data/{lineage}/initial_standard_titers.csv",
+        references="data/{lineage}/reference_strains.csv",
+    output:
+        data="data/{lineage}/standard_titers_without_metadata.tsv",
+    shell:
+        r"""
+        csvtk join -f serum_id {input.data} {input.references} \
+            | csvtk -T cut -f virus_strain,serum_strain,serum_id,titer > {output.data}
+        """
+
+rule merge_titers_and_metadata_by_serum_id:
+    input:
+        data="data/{lineage}/standard_titers_without_metadata.tsv",
+        metadata="data/titers_metadata_standardized.tsv",
+    output:
+        data="data/{lineage}/standard_titers.tsv",
+    shell:
+        r"""
+        csvtk join -t -f serum_id {input.data} {input.metadata} \
+           | csvtk -t rename -f cohort -n source \
+           | csvtk -t cut -f virus_strain,serum_strain,serum_id,source,titer,collection_date,age,sex > {output.data}
+        """
+
+#
+# Infer time-scaled, annotated phylogenies.
+#
+
+rule get_nextclade_dataset:
+    output:
+        nextclade_dir=directory("nextclade_dataset/{lineage}_ha/"),
+        reference="nextclade_dataset/{lineage}_ha/reference.fasta",
+        annotation="nextclade_dataset/{lineage}_ha/genome_annotation.gff3",
+    params:
+        name=lambda wildcards: NEXTCLADE_DATASET_BY_LINEAGE.get(wildcards.lineage, f"nextstrain/flu/{wildcards.lineage}/ha"),
+        nextclade_server_arg=lambda wildcards: f"--server={shquotewords(config['nextclade_server'])}" if config.get("nextclade_server") else "",
+    shell:
+        r"""
+        nextclade dataset get \
+            -n '{params.name}' \
+            {params.nextclade_server_arg} \
+            --output-dir {output.nextclade_dir}
+        """
+
+rule align:
+    input:
+        sequences="builds/{lineage}/sequences.fasta",
+        nextclade_dataset="nextclade_dataset/{lineage}_ha/",
+    output:
+        alignment="builds/{lineage}/aligned.fasta",
+        translations=expand("builds/{{lineage}}/translations/{gene}.fasta", gene=GENES),
+        annotations="builds/{lineage}/nextclade.tsv",
+    params:
+        translations_dir="builds/{lineage}/translations",
+    threads: 8
+    shell:
+        r"""
+        nextclade run \
+            {input.sequences} \
+            --jobs {threads} \
+            --input-dataset {input.nextclade_dataset} \
+            --gap-alignment-side right \
+            --include-reference \
+            --output-fasta {output.alignment} \
+            --output-translations "{params.translations_dir}/{{cds}}.fasta" \
+            --output-tsv {output.annotations}
+        """
+
+rule merge_nextclade_with_metadata:
+    input:
+        metadata="builds/{lineage}/metadata.tsv",
+        nextclade="builds/{lineage}/nextclade.tsv",
+    output:
+        merged="builds/{lineage}/metadata_with_nextclade.tsv",
+    params:
+        metadata_id="strain",
+        nextclade_id="seqName",
+    shell:
+        r"""
+        augur merge \
+           --metadata \
+             metadata={input.metadata} \
+             nextclade={input.nextclade} \
+           --metadata-id-columns \
+             metadata={params.metadata_id} \
+             nextclade={params.nextclade_id} \
+           --output-metadata {output.merged}
+        """
+
+rule tree:
+    input:
+        alignment="builds/{lineage}/aligned.fasta",
+    output:
+        tree="builds/{lineage}/tree_raw.nwk",
+    threads: 8
+    shell:
+        r"""
+        augur tree \
+            --alignment {input.alignment} \
+            --nthreads {threads} \
+            --output {output.tree}
+        """
+
+rule get_reference_name:
+    input:
+        reference="nextclade_dataset/{lineage}_ha/reference.fasta",
+    output:
+        reference="builds/{lineage}/reference_name.txt",
+    shell:
+        r"""
+        seqkit fx2tab --name --only-id {input.reference} > {output.reference}
+        """
+
+def clock_rate(wildcards):
+    # these rates are from 12y runs on 2019-10-18
+    rate = {
+        ('h1n1pdm', 'ha'): 0.00329,
+        ('h3n2', 'ha'): 0.00382,
+    }
+    return rate.get((wildcards.lineage, "ha"), 0.001)
+
+def clock_std_dev(wildcards):
+    return clock_rate(wildcards) / 5
+
+rule refine:
+    input:
+        tree="builds/{lineage}/tree_raw.nwk",
+        alignment="builds/{lineage}/aligned.fasta",
+        metadata="builds/{lineage}/metadata_with_nextclade.tsv",
+        reference="builds/{lineage}/reference_name.txt",
+    output:
+        tree="builds/{lineage}/tree.nwk",
+        node_data="builds/{lineage}/branch_lengths.json",
+    params:
+        coalescent = "const",
+        date_inference = "marginal",
+        clock_rate = clock_rate,
+        clock_std_dev = clock_std_dev,
+    shell:
+        r"""
+        augur refine \
+            --tree {input.tree} \
+            --alignment {input.alignment} \
+            --metadata {input.metadata} \
+            --output-tree {output.tree} \
+            --output-node-data {output.node_data} \
+            --root $(cat {input.reference}) \
+            --remove-outgroup \
+            --stochastic-resolve \
+            --timetree \
+            --use-fft \
+            --no-covariance \
+            --clock-rate {params.clock_rate} \
+            --clock-std-dev {params.clock_std_dev} \
+            --coalescent {params.coalescent} \
+            --date-confidence \
+            --date-inference {params.date_inference}
+        """
+
+rule ancestral:
+    input:
+        tree="builds/{lineage}/tree.nwk",
+        alignment="builds/{lineage}/aligned.fasta",
+        translations=expand("builds/{{lineage}}/translations/{gene}.fasta", gene=GENES),
+        reference="nextclade_dataset/{lineage}_ha/reference.fasta",
+        annotation="nextclade_dataset/{lineage}_ha/genome_annotation.gff3",
+    output:
+        node_data="builds/{lineage}/muts.json",
+        translations=expand("builds/{{lineage}}/translations/{gene}_withInternalNodes.fasta", gene=GENES),
+    params:
+        inference="joint",
+        genes=GENES,
+        input_translations="builds/{lineage}/translations/%GENE.fasta",
+        output_translations="builds/{lineage}/translations/%GENE_withInternalNodes.fasta",
+    shell:
+        r"""
+        augur ancestral \
+            --tree {input.tree} \
+            --alignment {input.alignment} \
+            --root-sequence {input.reference} \
+            --annotation {input.annotation} \
+            --genes {params.genes} \
+            --translations "{params.input_translations}" \
+            --output-node-data {output.node_data} \
+            --output-translations "{params.output_translations}" \
+            --inference {params.inference}
+        """
+
+rule ancestral_ha1:
+    input:
+        tree="builds/{lineage}/tree.nwk",
+        alignment="builds/{lineage}/aligned.fasta",
+        translations=expand("builds/{{lineage}}/translations/{gene}.fasta", gene=GENES),
+        reference="nextclade_dataset/{lineage}_ha/reference.fasta",
+        annotation="nextclade_dataset/{lineage}_ha/genome_annotation.gff3",
+    output:
+        node_data="builds/{lineage}/muts_ha1.json",
+    params:
+        inference="joint",
+        genes=["HA1"],
+        input_translations="builds/{lineage}/translations/%GENE.fasta",
+    shell:
+        r"""
+        augur ancestral \
+            --tree {input.tree} \
+            --alignment {input.alignment} \
+            --root-sequence {input.reference} \
+            --annotation {input.annotation} \
+            --genes {params.genes} \
+            --translations "{params.input_translations}" \
+            --output-node-data {output.node_data} \
+            --inference {params.inference}
+        """
+
+rule download_subclades:
+    output:
+        subclades="config/{lineage}/ha/subclades.tsv",
+    params:
+        url=lambda wildcards: SUBCLADE_URL_BY_LINEAGE_AND_SEGMENT.get(wildcards.lineage, {}).get("ha"),
+    shell:
+        r"""
+        curl -o {output.subclades} "{params.url}"
+        """
+
+rule subclades:
+    input:
+        tree="builds/{lineage}/tree.nwk",
+        muts="builds/{lineage}/muts.json",
+        subclades="config/{lineage}/ha/subclades.tsv",
+    output:
+        node_data="builds/{lineage}/subclades.json",
+    params:
+        membership_name = "subclade",
+        label_name = "Subclade",
+    shell:
+        r"""
+        augur clades \
+            --tree {input.tree} \
+            --mutations {input.muts} \
+            --clades {input.subclades} \
+            --membership-name {params.membership_name} \
+            --label-name {params.label_name} \
+            --output {output.node_data}
+        """
+
+rule emerging_haplotypes:
+    input:
+        nextclade="builds/{lineage}/metadata_with_nextclade.tsv",
+        haplotypes="config/{lineage}/emerging_haplotypes.tsv",
+    output:
+        haplotypes_table="builds/{lineage}/emerging_haplotypes.tsv",
+        node_data="builds/{lineage}/emerging_haplotypes.json",
+    params:
+        clade_column="clade",
+        membership_name="emerging_haplotype",
+    shell:
+        r"""
+        python scripts/assign_haplotypes.py \
+            --substitutions {input.nextclade:q} \
+            --haplotypes {input.haplotypes:q} \
+            --clade-column {params.clade_column:q} \
+            --haplotype-column-name {params.membership_name:q} \
+            --output-table {output.haplotypes_table:q} \
+            --output-node-data {output.node_data:q}
+        """
+
+rule annotate_median_titer_per_tip:
+    input:
+        titers="data/{lineage}/standard_titers.tsv",
+        tree="builds/{lineage}/tree.nwk",
+    output:
+        titers="builds/{lineage}/titers.json",
+    shell:
+        r"""
+        python scripts/annotate_titer_summary_per_tip.py \
+            --titers {input.titers} \
+            --tree {input.tree} \
+            --output {output.titers}
+        """
+
+rule titers_sub:
+    input:
+        titers="data/{lineage}/standard_titers.tsv",
+        tree="builds/{lineage}/tree.nwk",
+        translation="builds/{lineage}/translations/HA1_withInternalNodes.fasta",
+    output:
+        titers_model="builds/{lineage}/titers_sub.json",
+    params:
+        genes=["HA1"],
+    shell:
+        r"""
+        augur titers sub \
+            --titers {input.titers} \
+            --alignment {input.translation} \
+            --gene-names {params.genes} \
+            --tree {input.tree} \
+            --allow-empty-model \
+            --output {output.titers_model}
+        """
+
+rule export:
+    input:
+        tree="builds/{lineage}/tree.nwk",
+        metadata="builds/{lineage}/metadata_with_nextclade.tsv",
+        node_data=[
+            "builds/{lineage}/branch_lengths.json",
+            "builds/{lineage}/muts_ha1.json",
+            "builds/{lineage}/subclades.json",
+            "builds/{lineage}/emerging_haplotypes.json",
+            "builds/{lineage}/titers.json",
+            "builds/{lineage}/titers_sub.json",
+        ],
+        auspice_config="config/{lineage}/auspice_config.json",
+    output:
+        auspice_json="auspice/kikawa-seqneut-2025-2026-VCM_{lineage}.json",
+    shell:
+        r"""
+        augur export v2 \
+            --tree {input.tree} \
+            --metadata {input.metadata} \
+            --node-data {input.node_data} \
+            --auspice-config {input.auspice_config} \
+            --include-root-sequence-inline \
+            --output {output.auspice_json}
+        """
+
+rule tip_frequencies:
+    input:
+        tree="builds/{lineage}/tree.nwk",
+        metadata="builds/{lineage}/metadata_with_nextclade.tsv",
+    output:
+        frequencies="auspice/kikawa-seqneut-2025-2026-VCM_{lineage}_tip-frequencies.json",
+    params:
+        narrow_bandwidth=1 / 12.0,
+        proportion_wide=0.0,
+        min_date=MIN_DATE,
+        max_date=MAX_DATE,
+        pivot_interval=4,
+        pivot_interval_units="weeks",
+    shell:
+        r"""
+        augur frequencies \
+            --method kde \
+            --tree {input.tree} \
+            --metadata {input.metadata} \
+            --narrow-bandwidth {params.narrow_bandwidth} \
+            --proportion-wide {params.proportion_wide} \
+            --pivot-interval {params.pivot_interval} \
+            --pivot-interval-units {params.pivot_interval_units} \
+            --min-date {params.min_date} \
+            --max-date {params.max_date} \
+            --output {output.frequencies}
+        """
+
+rule export_tree_annotations:
+    input:
+        tree="auspice/kikawa-seqneut-2025-2026-VCM_{lineage}.json",
+    output:
+        tree_annotations="tables/{lineage}_annotations.tsv",
+    params:
+        attributes=[
+            "div",
+            "num_date",
+            "kikawa",
+            "subclade",
+        ],
+    shell:
+        r"""
+        python scripts/auspice_tree_to_table.py \
+            {input.tree} \
+            {output.tree_annotations} \
+            --include-internal-nodes \
+            --attributes {params.attributes}
+        """
+
+#
+# Export titer data to measurements panel.
+#
+
+rule calculate_log2_titer:
+    input:
+        titers="data/{lineage}/standard_titers.tsv",
+    output:
+        titers="data/{lineage}/log2_titers.tsv",
+    shell:
+        r"""
+        python3 scripts/calculate_log2_titer.py \
+            --titers {input.titers} \
+            --output {output.titers}
+        """
+
+rule export_measurements:
+    input:
+        titers="data/{lineage}/log2_titers.tsv",
+    output:
+        measurements="auspice/kikawa-seqneut-2025-2026-VCM_{lineage}_measurements.json",
+    params:
+        key="Kikawa20252026",
+        strain_column="virus_strain",
+        value_column="log2_titer",
+        title="log2 NT50s for human sera",
+        x_axis_label="log2 NT50",
+        grouping_columns=[
+            "serum_id",
+            "source",
+            "collection_date",
+            "age",
+            "sex",
+            "strain",
+        ],
+        measurements_display="raw",
+    shell:
+        r"""
+        augur measurements export \
+            --collection {input.titers} \
+            --key {params.key} \
+            --strain-column {params.strain_column} \
+            --value-column {params.value_column} \
+            --title {params.title:q} \
+            --x-axis-label {params.x_axis_label:q} \
+            --grouping-column {params.grouping_columns:q} \
+            --measurements-display {params.measurements_display} \
+            --hide-threshold \
+            --hide-overall-mean \
+            --minify-json \
+            --output-json {output.measurements} 2>&1 | tee {log}
+        """
