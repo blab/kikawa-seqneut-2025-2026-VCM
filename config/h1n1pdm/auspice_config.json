@@ -60,6 +60,11 @@
       ]
     },
     {
+      "key": "emerging_haplotype",
+      "title": "Emerging haplotype",
+      "type": "categorical"
+    },
+    {
       "key": "median_titer",
       "title": "Median raw titer",
       "type": "continuous",
