@@ -30,8 +30,8 @@ SUBCLADE_URL_BY_LINEAGE_AND_SEGMENT = {
 }
 
 SEQUENCES_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/final_titer_data/human_viruses.csv"
-TITER_METADATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/sera_metadata/all_sera_metadata.csv"
-TITER_DATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/aggregated_titers/titers_human.csv"
+TITER_METADATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/final_titer_data/human_sera.csv"
+TITER_DATA_URL = "https://github.com/jbloomlab/flu-seqneut-2025to2026/raw/refs/heads/main/results/final_titer_data/human_titers.csv"
 
 wildcard_constraints:
     lineage = r'h1n1pdm|h3n2',
@@ -191,7 +191,7 @@ rule prepare_titers_metadata:
     shell:
         r"""
         csvtk rename -f serum -n serum_id {input.data} \
-            | csvtk cut -T -f serum_id,cohort,collection_date,age,sex > {output.data}
+            | csvtk cut -T -f serum_id,cohort,serum_collection_date,age,sex > {output.data}
         """
 
 rule download_titers:
@@ -264,7 +264,7 @@ rule merge_titers_and_metadata_by_serum_id:
         r"""
         csvtk join -t -f serum_id {input.data} {input.metadata} \
            | csvtk -t rename -f cohort -n source \
-           | csvtk -t cut -f virus_strain,serum_strain,serum_id,source,titer,collection_date,age,sex > {output.data}
+           | csvtk -t cut -f virus_strain,serum_strain,serum_id,source,titer,serum_collection_date,age,sex > {output.data}
         """
 
 #
@@ -648,7 +648,7 @@ rule export_measurements:
         grouping_columns=[
             "serum_id",
             "source",
-            "collection_date",
+            "serum_collection_date",
             "age",
             "sex",
             "strain",
